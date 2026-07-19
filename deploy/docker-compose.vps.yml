@@ -1,0 +1,89 @@
+services:
+  paytransparency:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: equalpay-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+      FIELD_ENCRYPTION_MASTER_KEY_B64: ${FIELD_ENCRYPTION_MASTER_KEY_B64:?FIELD_ENCRYPTION_MASTER_KEY_B64 is required}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      AZURE_AD_TENANT_ID: ${AZURE_AD_TENANT_ID:-}
+      AZURE_AD_CLIENT_ID: ${AZURE_AD_CLIENT_ID:-}
+      AZURE_AD_CLIENT_SECRET: ${AZURE_AD_CLIENT_SECRET:-}
+      AZURE_AD_ISSUER: ${AZURE_AD_ISSUER:-}
+    depends_on:
+      paytransparency-db:
+        condition: service_healthy
+    networks:
+      - equalpay-internal
+    expose:
+      - "3000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+      - /app/.next/cache:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  paytransparency-db:
+    image: postgres:16-alpine
+    container_name: equalpay-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: paytransparency
+      POSTGRES_USER: paytransparency
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - equalpay_pgdata:/var/lib/postgresql/data
+    networks:
+      - equalpay-internal
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paytransparency -d paytransparency"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: equalpay-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    depends_on:
+      paytransparency:
+        condition: service_healthy
+    networks:
+      - equalpay-internal
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  equalpay_pgdata:
+
+networks:
+  equalpay-internal:
+    driver: bridge

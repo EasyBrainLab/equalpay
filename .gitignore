@@ -1,0 +1,25 @@
+.next
+node_modules
+.DS_Store
+.env
+.env.local
+.env.production
+coverage
+dist
+*.tsbuildinfo
+storage
+.pgdata
+pg.log
+
+# Local source material and analysis artefacts. Do not publish customer/HR
+# documents or extracted text into GitHub.
+_analysis
+drive-download-*
+Konzept_Einfuehrung_Entgeltsystem_Medical.md
+Toolkonzept_Entgelttransparenz_HR_Suite.md
+
+# Local deployment files
+*.pem
+*.key
+*.crt
+*.p12

@@ -1,0 +1,947 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  AZURE_AD
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum RoleKey {
+  SYSTEM_ADMIN
+  SECURITY_ADMIN
+  HR_ADMIN
+  HR_ANALYST
+  COMPENSATION_MANAGER
+  HR_VIEWER
+  LEGAL_REVIEWER
+  EMPLOYEE_REP_REVIEWER
+  MANAGER_CONTRIBUTOR
+  AUDITOR
+  IMPORT_OPERATOR
+}
+
+enum DataSensitivity {
+  PUBLIC_CONFIG
+  HR_STRUCTURAL
+  PERSONAL_BASIC
+  PERSONAL_SENSITIVE
+  PAY_SENSITIVE
+  PAY_ANALYTICS
+  LEGAL_CONFIDENTIAL
+  SECURITY
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  DIVERSE
+  NOT_DISCLOSED
+  UNKNOWN
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  LEAVE
+  TERMINATED
+}
+
+enum CompensationType {
+  BASE_SALARY
+  VARIABLE_PAY
+  BONUS
+  ALLOWANCE
+  BENEFIT
+  COMPANY_CAR
+  PENSION
+  SPECIAL_PAYMENT
+  ONE_TIME_PAYMENT
+}
+
+enum EvaluationStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum DisclosureStatus {
+  RECEIVED
+  IN_REVIEW
+  WAITING_FOR_LEGAL
+  READY
+  ANSWERED
+  OVERDUE
+  CANCELLED
+}
+
+enum DocumentType {
+  POLICY
+  WORKS_AGREEMENT
+  JOB_PROFILE
+  LEGAL_MEMO
+  REPORT
+  OFFER
+  TEMPLATE
+  OTHER
+}
+
+enum ApprovalStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum ReportType {
+  ARTICLE_9_PAY_GAP
+  INTERNAL_DRY_RUN
+  DISCLOSURE_RESPONSE
+  REMEDIATION_STATUS
+}
+
+enum ReportStatus {
+  DRAFT
+  GENERATED
+  APPROVED
+  SUBMITTED
+  ARCHIVED
+}
+
+enum RemediationStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_APPROVAL
+  COMPLETED
+  CANCELLED
+}
+
+enum RecruitmentStatus {
+  DRAFT
+  APPROVED
+  PUBLISHED
+  CLOSED
+}
+
+enum RetentionAction {
+  REVIEW
+  ANONYMIZE
+  DELETE
+  LEGAL_HOLD
+}
+
+enum AiJobDraftStatus {
+  UPLOADED
+  ANALYZED
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+  TRANSFERRED
+}
+
+enum OnboardingCompletionStatus {
+  COMPLETED
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companies           Company[]
+  users               User[]
+  roles               RoleAssignment[]
+  jobFamilies         JobFamily[]
+  jobProfiles         JobProfile[]
+  payGrades           PayGrade[]
+  salaryBands         SalaryBand[]
+  employees           Employee[]
+  compensation        CompensationComponent[]
+  payGapAnalyses      PayGapAnalysis[]
+  disclosureRequests  DisclosureRequest[]
+  documents           Document[]
+  auditLogs           AuditLog[]
+  complianceReports   ComplianceReport[]
+  disclosureResponses DisclosureResponse[]
+  recruitmentPostings RecruitmentPosting[]
+  remediationActions  RemediationAction[]
+  retentionPolicies   RetentionPolicy[]
+  aiJobPromptVersions AiJobPromptVersion[]
+  aiJobDrafts         AiJobArchitectureDraft[]
+  onboardingModules   OnboardingModule[]
+  onboardingCompletions OnboardingCompletion[]
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  code      String
+  country   String   @default("DE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  segments    Segment[]
+  sites       Site[]
+  departments Department[]
+  employees   Employee[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model Segment {
+  id        String   @id @default(cuid())
+  tenantId  String
+  companyId String?
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  employees Employee[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([companyId])
+}
+
+model Site {
+  id        String   @id @default(cuid())
+  tenantId  String
+  companyId String
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, code])
+  @@index([companyId])
+}
+
+model Department {
+  id        String   @id @default(cuid())
+  tenantId  String
+  companyId String
+  name      String
+  code      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employees Employee[]
+
+  @@unique([tenantId, code])
+  @@index([companyId])
+}
+
+model User {
+  id            String       @id @default(cuid())
+  tenantId      String
+  email         String
+  name          String
+  status        UserStatus   @default(ACTIVE)
+  authProvider  AuthProvider @default(LOCAL)
+  azureObjectId String?
+  passwordHash  String?
+  mfaRequired   Boolean      @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roles     RoleAssignment[]
+  sessions  Session[]
+  auditLogs AuditLog[]
+  approvals ApprovalStep[]
+  onboardingCompletions OnboardingCompletion[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model OnboardingModule {
+  id               String   @id @default(cuid())
+  tenantId         String
+  key              String
+  version          Int      @default(1)
+  title            String
+  objective        String
+  content          String
+  contentHash      String
+  estimatedMinutes Int      @default(5)
+  sortOrder        Int      @default(0)
+  applicableRoles  RoleKey[] @default([])
+  required         Boolean  @default(true)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  completions OnboardingCompletion[]
+
+  @@unique([tenantId, key, version])
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@index([key])
+}
+
+model OnboardingCompletion {
+  id              String                     @id @default(cuid())
+  tenantId        String
+  userId          String
+  moduleId        String
+  moduleKey       String
+  moduleVersion   Int
+  status          OnboardingCompletionStatus @default(COMPLETED)
+  attestationText String
+  completedAt     DateTime                   @default(now())
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module OnboardingModule @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId, moduleKey, moduleVersion])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([moduleId])
+  @@index([completedAt])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RoleAssignment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  userId      String
+  role        RoleKey
+  scopeJson   Json     @default("{}")
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([role])
+}
+
+model Employee {
+  id             String           @id @default(cuid())
+  tenantId       String
+  companyId      String
+  segmentId      String?
+  siteId         String?
+  departmentId   String?
+  employeeNumber String
+  displayName    String
+  pseudonym      String
+  gender         Gender           @default(UNKNOWN)
+  status         EmploymentStatus @default(ACTIVE)
+  fte            Decimal          @db.Decimal(5, 2)
+  weeklyHours    Decimal          @db.Decimal(5, 2)
+  fullTimeHours  Decimal          @db.Decimal(5, 2)
+  jobProfileId   String?
+  payGradeId     String?
+  hiredAt        DateTime?
+  terminatedAt   DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company             Company                 @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  segment             Segment?                @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  site                Site?                   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  department          Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  jobProfile          JobProfile?             @relation(fields: [jobProfileId], references: [id], onDelete: SetNull)
+  payGrade            PayGrade?               @relation(fields: [payGradeId], references: [id], onDelete: SetNull)
+  compensation        CompensationComponent[]
+  disclosureResponses DisclosureResponse[]
+
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId])
+  @@index([companyId])
+  @@index([jobProfileId])
+  @@index([payGradeId])
+}
+
+model JobFamily {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  code        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobProfiles JobProfile[]
+
+  @@unique([tenantId, code])
+}
+
+model PayGrade {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  minPoints   Int
+  maxPoints   Int
+  sortOrder   Int
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobProfiles JobProfile[]
+  employees   Employee[]
+  salaryBands SalaryBand[]
+
+  @@unique([tenantId, code])
+}
+
+model ComparisonGroup {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jobProfiles JobProfile[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model JobProfile {
+  id                String           @id @default(cuid())
+  tenantId          String
+  jobFamilyId       String?
+  payGradeId        String?
+  comparisonGroupId String?
+  title             String
+  code              String
+  version           Int              @default(1)
+  status            EvaluationStatus @default(DRAFT)
+  summary           String?
+  responsibilities  String?
+  requirements      String?
+  totalPoints       Int?
+  validFrom         DateTime?
+  validTo           DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobFamily           JobFamily?               @relation(fields: [jobFamilyId], references: [id], onDelete: SetNull)
+  payGrade            PayGrade?                @relation(fields: [payGradeId], references: [id], onDelete: SetNull)
+  comparisonGroup     ComparisonGroup?         @relation(fields: [comparisonGroupId], references: [id], onDelete: SetNull)
+  evaluations         JobEvaluation[]
+  employees           Employee[]
+  recruitmentPostings RecruitmentPosting[]
+  aiTransferredDrafts AiJobArchitectureDraft[]
+
+  @@unique([tenantId, code, version])
+  @@index([tenantId])
+  @@index([payGradeId])
+}
+
+model AiJobPromptVersion {
+  id           String   @id @default(cuid())
+  tenantId     String
+  version      String
+  name         String
+  systemPrompt String
+  outputSchema Json     @default("{}")
+  active       Boolean  @default(true)
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  drafts AiJobArchitectureDraft[]
+
+  @@unique([tenantId, version])
+  @@index([tenantId])
+  @@index([active])
+}
+
+model AiJobArchitectureDraft {
+  id                       String           @id @default(cuid())
+  tenantId                 String
+  promptVersionId          String
+  sourceFileName           String
+  sourceMimeType           String
+  sourceSizeBytes          Int
+  sourceChecksumSha256     String
+  businessUnit             String?
+  companyCode              String?
+  sourceLanguage           String?
+  extractedTextCipher      String
+  extractedTextKeyId       String
+  redactionSummary         Json             @default("{}")
+  status                   AiJobDraftStatus @default(ANALYZED)
+  placeholderProvider      String           @default("LOCAL_HEURISTIC")
+  placeholderModel         String           @default("no-external-ai")
+  promptHashSha256         String
+  analysisJson             Json             @default("{}")
+  suggestedTitle           String?
+  suggestedCode            String?
+  suggestedJobFamily       String?
+  suggestedComparisonGroup String?
+  suggestedGradeCode       String?
+  suggestedTotalPoints     Int?
+  confidence               Decimal?         @db.Decimal(5, 3)
+  missingInformation       Json             @default("[]")
+  biasWarnings             Json             @default("[]")
+  reviewerNotes            String?
+  reviewedById             String?
+  reviewedAt               DateTime?
+  transferredJobProfileId  String?
+  createdById              String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  promptVersion         AiJobPromptVersion @relation(fields: [promptVersionId], references: [id], onDelete: Restrict)
+  transferredJobProfile JobProfile?        @relation(fields: [transferredJobProfileId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([transferredJobProfileId])
+}
+
+model EvaluationCriterion {
+  id          String   @id @default(cuid())
+  tenantId    String
+  key         String
+  name        String
+  weight      Int
+  description String?
+  sortOrder   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scores JobEvaluationScore[]
+
+  @@unique([tenantId, key])
+}
+
+model JobEvaluation {
+  id           String           @id @default(cuid())
+  tenantId     String
+  jobProfileId String
+  status       EvaluationStatus @default(DRAFT)
+  totalPoints  Int
+  notes        String?
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  jobProfile JobProfile           @relation(fields: [jobProfileId], references: [id], onDelete: Cascade)
+  scores     JobEvaluationScore[]
+
+  @@index([tenantId])
+  @@index([jobProfileId])
+}
+
+model JobEvaluationScore {
+  id           String  @id @default(cuid())
+  evaluationId String
+  criterionId  String
+  score        Int
+  weighted     Int
+  evidence     String?
+
+  evaluation JobEvaluation       @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterion  EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  @@unique([evaluationId, criterionId])
+}
+
+model SalaryBand {
+  id            String    @id @default(cuid())
+  tenantId      String
+  payGradeId    String
+  name          String
+  currency      String    @default("EUR")
+  fullTimeHours Decimal   @db.Decimal(5, 2)
+  minAmount     Int
+  midAmount     Int
+  maxAmount     Int
+  validFrom     DateTime
+  validTo       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payGrade PayGrade @relation(fields: [payGradeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([payGradeId])
+}
+
+model CompensationComponent {
+  id               String           @id @default(cuid())
+  tenantId         String
+  employeeId       String
+  type             CompensationType
+  label            String
+  amountCiphertext String
+  amountKeyId      String
+  amountLast4      String?
+  currency         String           @default("EUR")
+  validFrom        DateTime
+  validTo          DateTime?
+  legalBasis       String?
+  objectiveReason  String?
+  approvalStatus   ApprovalStatus   @default(DRAFT)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([type])
+}
+
+model PayGapAnalysis {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  scopeJson   Json     @default("{}")
+  dataCutDate DateTime
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rows    PayGapAnalysisRow[]
+  reports ComplianceReport[]
+
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+model PayGapAnalysisRow {
+  id                 String  @id @default(cuid())
+  analysisId         String
+  groupKey           String
+  groupLabel         String
+  employeeCount      Int
+  femaleCount        Int
+  maleCount          Int
+  averageGapPercent  Decimal @db.Decimal(8, 3)
+  medianGapPercent   Decimal @db.Decimal(8, 3)
+  unexplainedGap     Boolean @default(false)
+  triggerFivePercent Boolean @default(false)
+  objectiveReason    String?
+  remediationPlan    String?
+
+  analysis           PayGapAnalysis      @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  remediationActions RemediationAction[]
+
+  @@index([analysisId])
+  @@index([triggerFivePercent])
+}
+
+model DisclosureRequest {
+  id               String           @id @default(cuid())
+  tenantId         String
+  employeeId       String?
+  requesterLabel   String
+  status           DisclosureStatus @default(RECEIVED)
+  receivedAt       DateTime         @default(now())
+  dueAt            DateTime
+  comparisonGroup  String?
+  responseDocument String?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  tenant    Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  responses DisclosureResponse[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueAt])
+}
+
+model DisclosureResponse {
+  id                      String    @id @default(cuid())
+  tenantId                String
+  disclosureRequestId     String
+  employeeId              String?
+  generatedAt             DateTime  @default(now())
+  generatedById           String?
+  employeePayAmountCipher String?
+  employeePayKeyId        String?
+  comparisonGroup         String?
+  comparisonEmployeeCount Int       @default(0)
+  averagePayFemale        Int?
+  averagePayMale          Int?
+  medianPayFemale         Int?
+  medianPayMale           Int?
+  answerText              String
+  legalReviewRequired     Boolean   @default(true)
+  approvedAt              DateTime?
+  deliveredAt             DateTime?
+  createdAt               DateTime  @default(now())
+
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  disclosureRequest DisclosureRequest @relation(fields: [disclosureRequestId], references: [id], onDelete: Cascade)
+  employee          Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([disclosureRequestId])
+  @@index([employeeId])
+}
+
+model ComplianceReport {
+  id                   String       @id @default(cuid())
+  tenantId             String
+  type                 ReportType
+  status               ReportStatus @default(GENERATED)
+  name                 String
+  periodStart          DateTime
+  periodEnd            DateTime
+  generatedAt          DateTime     @default(now())
+  generatedById        String?
+  payGapAnalysisId     String?
+  rowCount             Int          @default(0)
+  exportFormat         String       @default("CSV")
+  exportChecksumSha256 String?
+  exportCipher         String?
+  findingsJson         Json         @default("{}")
+  approvedAt           DateTime?
+  submittedAt          DateTime?
+  createdAt            DateTime     @default(now())
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payGapAnalysis PayGapAnalysis? @relation(fields: [payGapAnalysisId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([status])
+  @@index([periodEnd])
+}
+
+model RemediationAction {
+  id                 String            @id @default(cuid())
+  tenantId           String
+  payGapRowId        String?
+  title              String
+  description        String
+  rootCause          String?
+  objectiveReason    String?
+  ownerUserId        String?
+  dueAt              DateTime
+  status             RemediationStatus @default(OPEN)
+  completedAt        DateTime?
+  evidenceDocumentId String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payGapRow PayGapAnalysisRow? @relation(fields: [payGapRowId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueAt])
+  @@index([payGapRowId])
+}
+
+model RecruitmentPosting {
+  id                  String            @id @default(cuid())
+  tenantId            String
+  jobProfileId        String?
+  title               String
+  location            String?
+  status              RecruitmentStatus @default(DRAFT)
+  salaryMinAmount     Int
+  salaryMaxAmount     Int
+  currency            String            @default("EUR")
+  payTransparencyText String
+  genderNeutralCheck  Boolean           @default(false)
+  priorPayQuestionBan Boolean           @default(true)
+  publishedAt         DateTime?
+  closedAt            DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobProfile JobProfile? @relation(fields: [jobProfileId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([jobProfileId])
+}
+
+model RetentionPolicy {
+  id            String          @id @default(cuid())
+  tenantId      String
+  entityType    String
+  retentionDays Int
+  action        RetentionAction @default(REVIEW)
+  legalBasis    String
+  active        Boolean         @default(true)
+  lastRunAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, entityType])
+  @@index([tenantId])
+  @@index([active])
+}
+
+model Document {
+  id          String          @id @default(cuid())
+  tenantId    String
+  type        DocumentType
+  title       String
+  sensitivity DataSensitivity @default(HR_STRUCTURAL)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  versions DocumentVersion[]
+
+  @@index([tenantId])
+  @@index([type])
+}
+
+model DocumentVersion {
+  id               String   @id @default(cuid())
+  documentId       String
+  version          Int
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  storageKey       String
+  contentCipher    String?
+  encryptionKeyId  String?
+  checksumSha256   String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, version])
+}
+
+model ApprovalWorkflow {
+  id         String         @id @default(cuid())
+  tenantId   String
+  entityType String
+  entityId   String
+  status     ApprovalStatus @default(PENDING)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  steps ApprovalStep[]
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+}
+
+model ApprovalStep {
+  id         String         @id @default(cuid())
+  workflowId String
+  approverId String
+  status     ApprovalStatus @default(PENDING)
+  comment    String?
+  decidedAt  DateTime?
+  createdAt  DateTime       @default(now())
+
+  workflow ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  approver User             @relation(fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([approverId])
+}
+
+model ImportBatch {
+  id            String    @id @default(cuid())
+  tenantId      String
+  type          String
+  fileName      String?
+  rowCount      Int       @default(0)
+  acceptedCount Int       @default(0)
+  rejectedCount Int       @default(0)
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  createdById   String?
+
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id         String        @id @default(cuid())
+  tenantId   String?
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  severity   AuditSeverity @default(INFO)
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime      @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}

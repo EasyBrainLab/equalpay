@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ez-petrol: #0d5068;
+  --color-ez-petrol-700: #0a3f52;
+  --color-ez-petrol-100: #d6e2e7;
+  --color-ez-petrol-50: #eaf1f4;
+  --color-ez-burgundy: #7b1e3c;
+  --color-ez-burgundy-700: #5e1730;
+  --color-ez-burgundy-100: #ebd6dd;
+  --color-ez-burgundy-50: #f7edf1;
+  --color-ez-navy: #1c2d4a;
+  --color-ez-muted: #5b6b7f;
+  --color-ez-line: #e2e5ea;
+  --color-ez-bg: #f7f8fa;
+  --color-ez-surface: #ffffff;
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  background: #f7f8fa;
+  color: #1c2d4a;
+  font-family: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid #0d5068;
+  outline-offset: 2px;
+}
