@@ -3,13 +3,11 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState("hr.admin@example.local");
-  const [password, setPassword] = useState("ChangeMe-Entgelt-2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +17,8 @@ export default function LoginPage() {
     setError(null);
     const response = await fetch("/api/auth/login", {
       method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
@@ -28,7 +28,7 @@ export default function LoginPage() {
       setError(body.error ?? "Login fehlgeschlagen.");
       return;
     }
-    router.replace("/dashboard");
+    window.location.assign("/dashboard");
   }
 
   return (
