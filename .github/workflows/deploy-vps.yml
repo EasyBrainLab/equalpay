@@ -55,13 +55,24 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VPS_HOST"
-          test -n "$VPS_SSH_KEY"
+          if [ -z "${VPS_HOST:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_HOST."
+            exit 1
+          fi
+          if [ -z "${VPS_SSH_KEY:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_SSH_KEY."
+            exit 1
+          fi
+          if [ -z "${VPS_PORT:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_PORT or default value."
+            exit 1
+          fi
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/equalpay_vps
           chmod 600 ~/.ssh/equalpay_vps
-          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/equalpay_vps > /dev/null
+          ssh-keyscan -T 10 -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
       - name: Sync source to VPS
         env:
@@ -71,7 +82,19 @@ jobs:
           VPS_APP_DIR: ${{ secrets.VPS_APP_DIR || '/opt/equalpay' }}
         run: |
           set -euo pipefail
-          test -n "$VPS_USER"
+          if [ -z "${VPS_USER:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_USER."
+            exit 1
+          fi
+          if [ -z "${VPS_HOST:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_HOST."
+            exit 1
+          fi
+          if [ -z "${VPS_APP_DIR:-}" ]; then
+            echo "::error::Missing GitHub Actions secret VPS_APP_DIR or default value."
+            exit 1
+          fi
+          ssh -o BatchMode=yes -i ~/.ssh/equalpay_vps -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "echo SSH connection OK"
           ssh -i ~/.ssh/equalpay_vps -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "mkdir -p '$VPS_APP_DIR'"
           rsync -az --delete \
             -e "ssh -i ~/.ssh/equalpay_vps -p $VPS_PORT" \
@@ -99,7 +122,10 @@ jobs:
           ssh -i ~/.ssh/equalpay_vps -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "
             set -euo pipefail
             cd '$VPS_APP_DIR'
-            test -f .env.production
+            if [ ! -f .env.production ]; then
+              echo 'Missing .env.production on VPS in $VPS_APP_DIR. Create it from deploy/env.production.example and rerun the workflow.'
+              exit 1
+            fi
             docker compose --env-file .env.production -f deploy/docker-compose.vps.yml up -d --build
             docker compose --env-file .env.production -f deploy/docker-compose.vps.yml exec -T paytransparency npx prisma migrate deploy
             docker compose --env-file .env.production -f deploy/docker-compose.vps.yml exec -T paytransparency wget -qO- http://127.0.0.1:3000/api/health
