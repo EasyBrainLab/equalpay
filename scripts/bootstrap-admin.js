@@ -1,5 +1,5 @@
 const { PrismaClient } = require("@prisma/client");
-const { randomBytes, scrypt } = require("node:crypto");
+const { randomBytes, scrypt, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
 
 const prisma = new PrismaClient();
@@ -10,6 +10,15 @@ async function hashPassword(password) {
   const salt = randomBytes(16).toString("base64url");
   const derived = await scryptAsync(password, salt, KEY_LENGTH);
   return `scrypt-v1$${salt}$${derived.toString("base64url")}`;
+}
+
+async function verifyPassword(password, stored) {
+  const [scheme, salt, hash] = stored.split("$");
+  if (scheme !== "scrypt-v1" || !salt || !hash) return false;
+  const derived = await scryptAsync(password, salt, KEY_LENGTH);
+  const expected = Buffer.from(hash, "base64url");
+  if (expected.length !== derived.length) return false;
+  return timingSafeEqual(expected, derived);
 }
 
 function requireEnv(name) {
@@ -73,6 +82,15 @@ async function main() {
     await ensureRole(tenant.id, user.id, role);
   }
 
+  await prisma.session.deleteMany({ where: { userId: user.id } });
+
+  const reloaded = await prisma.user.findUniqueOrThrow({
+    where: { id: user.id },
+    include: { roles: true },
+  });
+  const passwordWorks = await verifyPassword(password, reloaded.passwordHash);
+  if (!passwordWorks) throw new Error("Password verification failed after admin bootstrap.");
+
   await prisma.auditLog.create({
     data: {
       tenantId: tenant.id,
@@ -86,7 +104,12 @@ async function main() {
   });
 
   console.log(`Bootstrap admin ready: ${email}`);
-  console.log(`Roles: ${roles.join(", ")}`);
+  console.log(`Status: ${reloaded.status}`);
+  console.log(`Auth provider: ${reloaded.authProvider}`);
+  console.log(`MFA required: ${reloaded.mfaRequired}`);
+  console.log(`Password verification: ${passwordWorks ? "ok" : "failed"}`);
+  console.log(`Sessions cleared: yes`);
+  console.log(`Roles: ${reloaded.roles.map((role) => role.role).sort().join(", ")}`);
 }
 
 main()
