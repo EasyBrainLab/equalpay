@@ -3,12 +3,13 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { BriefcaseBusiness, FileSpreadsheet, ShieldCheck, Timer, Upload, UserPlus, Save } from "lucide-react";
+import { BriefcaseBusiness, FileSpreadsheet, KeyRound, Pencil, ShieldCheck, Timer, Trash2, Upload, UserPlus, Save } from "lucide-react";
 
 type Option = { id: string; label: string };
 type EmployeeOption = Option & { meta?: string };
 type CriterionOption = Option & { weight: number };
 type UserOption = Option & { email: string };
+type ManagedUserOption = UserOption & { authProvider: "LOCAL" | "AZURE_AD"; azureObjectId?: string | null; status: "ACTIVE" | "INVITED" | "DISABLED"; roles: string[] };
 
 const roleOptions = [
   "SYSTEM_ADMIN",
@@ -94,17 +95,21 @@ function Result({ message, error }: { message?: string; error?: string }) {
   return <div className={`rounded px-3 py-2 text-sm ${error ? "bg-ez-burgundy-50 text-ez-burgundy-700" : "bg-emerald-50 text-emerald-700"}`}>{error ?? message}</div>;
 }
 
-async function postJson(path: string, payload: unknown) {
+async function requestJson(path: string, method: "POST" | "PATCH" | "DELETE", payload: unknown) {
   const response = await fetch(path, {
-    method: "POST",
+    method,
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
   const data = await response.json().catch(() => ({}));
-  if (response.status === 401) throw new Error("Nicht authentifiziert. Bitte mit dem Systemadmin erneut anmelden und dieselbe URL verwenden.");
+  if (response.status === 401) throw new Error("Nicht authentifiziert. Bitte erneut anmelden und dieselbe URL verwenden.");
   if (!response.ok) throw new Error(data.error ?? "Speichern fehlgeschlagen");
   return data;
+}
+
+async function postJson(path: string, payload: unknown) {
+  return requestJson(path, "POST", payload);
 }
 
 function useSubmitState() {
@@ -441,6 +446,148 @@ export function UserCreateForm() {
         <Result message={state.message} error={state.error} />
         <SubmitButton icon={<UserPlus size={16} />} label="Benutzer speichern" busy={state.busy} />
       </form>
+    </FormPanel>
+  );
+}
+
+export function UserManagementForm({ users, currentUserId }: { users: ManagedUserOption[]; currentUserId: string }) {
+  const router = useRouter();
+  const [selectedId, setSelectedId] = useState(users[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string>();
+  const [error, setError] = useState<string>();
+  const selected = users.find((user) => user.id === selectedId) ?? users[0];
+
+  async function run(action: () => Promise<void>, success: string) {
+    setBusy(true);
+    setMessage(undefined);
+    setError(undefined);
+    try {
+      await action();
+      setMessage(success);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Aktion fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!selected) {
+    return (
+      <FormPanel title="Benutzer verwalten" description="Benutzer bearbeiten, deaktivieren und Passwoerter zuruecksetzen.">
+        <div className="text-sm text-ez-muted">Noch keine Benutzer vorhanden.</div>
+      </FormPanel>
+    );
+  }
+
+  return (
+    <FormPanel title="Benutzer verwalten" description="Stammdaten, Provider, Status, Rollen und lokale Passwoerter administrieren.">
+      <div className="space-y-4">
+        <Field label="Benutzer auswaehlen">
+          <select className={inputClass} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>{user.label} · {user.email}</option>
+            ))}
+          </select>
+        </Field>
+
+        <form
+          key={selected.id}
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            void run(async () => {
+              await requestJson("/api/admin/users", "PATCH", {
+                userId: selected.id,
+                name: String(data.get("name")),
+                email: String(data.get("email")),
+                authProvider: String(data.get("authProvider")),
+                azureObjectId: optional(data.get("azureObjectId")),
+                status: String(data.get("status")),
+                roles: roleOptions.filter((role) => data.get(`role:${role}`) === "on"),
+              });
+            }, "Benutzer aktualisiert.");
+          }}
+        >
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Name"><input className={inputClass} name="name" defaultValue={selected.label} required /></Field>
+            <Field label="E-Mail"><input className={inputClass} name="email" type="email" defaultValue={selected.email} required /></Field>
+            <Field label="Provider">
+              <select className={inputClass} name="authProvider" defaultValue={selected.authProvider}>
+                <option value="LOCAL">LOCAL</option>
+                <option value="AZURE_AD">AZURE_AD</option>
+              </select>
+            </Field>
+            <Field label="Status">
+              <select className={inputClass} name="status" defaultValue={selected.status}>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INVITED">INVITED</option>
+                <option value="DISABLED">DISABLED</option>
+              </select>
+            </Field>
+            <Field label="Azure Object ID"><input className={inputClass} name="azureObjectId" defaultValue={selected.azureObjectId ?? ""} /></Field>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold uppercase text-ez-muted">Rollen</div>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {roleOptions.map((role) => (
+                <label key={role} className="flex items-center gap-2 rounded border border-ez-line px-3 py-2 text-sm">
+                  <input name={`role:${role}`} type="checkbox" defaultChecked={selected.roles.includes(role)} />
+                  {role}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <Field label="Neues Passwort fuer Reset">
+            <input className={inputClass} name="resetPassword" type="password" minLength={12} autoComplete="new-password" />
+          </Field>
+
+          <Result message={message} error={error} />
+          <div className="flex flex-wrap gap-2">
+            <SubmitButton icon={<Pencil size={16} />} label="Benutzer aktualisieren" busy={busy} />
+            <button
+              type="button"
+              disabled={busy || selected.authProvider !== "LOCAL"}
+              className="focus-ring inline-flex items-center gap-2 rounded border border-ez-line bg-white px-3 py-2 text-sm font-medium text-ez-navy hover:border-ez-petrol disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={(event) => {
+                const form = event.currentTarget.form;
+                const passwordInput = form?.elements.namedItem("resetPassword");
+                const password = passwordInput instanceof HTMLInputElement ? passwordInput.value : "";
+                if (!password) {
+                  setError("Bitte zuerst ein neues Passwort eingeben.");
+                  setMessage(undefined);
+                  return;
+                }
+                void run(async () => {
+                  await requestJson("/api/admin/users", "PATCH", { action: "resetPassword", userId: selected.id, password });
+                  if (passwordInput instanceof HTMLInputElement) passwordInput.value = "";
+                }, "Passwort zurueckgesetzt. Bestehende Sessions wurden geloescht.");
+              }}
+            >
+              <KeyRound size={16} />
+              Passwort zuruecksetzen
+            </button>
+            <button
+              type="button"
+              disabled={busy || selected.id === currentUserId || selected.status === "DISABLED"}
+              className="focus-ring inline-flex items-center gap-2 rounded border border-ez-burgundy-100 bg-white px-3 py-2 text-sm font-medium text-ez-burgundy-700 hover:bg-ez-burgundy-50 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                if (!window.confirm(`Benutzer ${selected.email} deaktivieren? Der Login wird gesperrt und aktive Sessions werden geloescht.`)) return;
+                void run(async () => {
+                  await requestJson("/api/admin/users", "DELETE", { userId: selected.id });
+                }, "Benutzer deaktiviert.");
+              }}
+            >
+              <Trash2 size={16} />
+              Benutzer loeschen/deaktivieren
+            </button>
+          </div>
+        </form>
+      </div>
     </FormPanel>
   );
 }

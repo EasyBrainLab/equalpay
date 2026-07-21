@@ -22,7 +22,7 @@ const roleSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { ctx, error } = await requirePermission("system:admin");
+  const { ctx, error } = await requirePermission("users:admin");
   if (error === "unauthorized") return unauthorized();
   if (error === "forbidden") return forbidden();
 

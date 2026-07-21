@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { RetentionPolicyForm, RoleAssignmentForm, UserCreateForm } from "@/components/forms/hr-admin-forms";
+import { RetentionPolicyForm, RoleAssignmentForm, UserCreateForm, UserManagementForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -8,7 +8,7 @@ import { completionPercent, getActiveOnboardingModules, moduleAppliesToRoles } f
 
 export default async function AdminPage() {
   const ctx = await requireAuth();
-  const canAdminSystem = hasPermission(ctx.roles, "system:admin");
+  const canAdminUsers = hasPermission(ctx.roles, "users:admin");
   const canAdminRetention = hasPermission(ctx.roles, "retention:admin");
   const [users, audits, retentionPolicies, onboardingModules, onboardingCompletions] = await Promise.all([
     prisma.user.findMany({ where: { tenantId: ctx.tenantId }, include: { roles: true }, orderBy: { email: "asc" } }),
@@ -31,22 +31,30 @@ export default async function AdminPage() {
     <>
       <PageHeader title="Administration" description="Technische Administration ohne fachlichen Klartextzugriff. Produktiv nur mit SSO/MFA und KMS-Freigabe." />
       <main className="grid gap-6 p-6 xl:grid-cols-2">
-        {canAdminSystem && (
+        {canAdminUsers && (
           <>
             <UserCreateForm />
+            <UserManagementForm
+              currentUserId={ctx.user.id}
+              users={users.map((user) => ({
+                id: user.id,
+                label: user.name,
+                email: user.email,
+                authProvider: user.authProvider,
+                azureObjectId: user.azureObjectId,
+                status: user.status,
+                roles: user.roles.map((role) => role.role),
+              }))}
+            />
             <RoleAssignmentForm users={users.map((user) => ({ id: user.id, label: user.name, email: user.email }))} />
           </>
         )}
-        {!canAdminSystem && (
+        {!canAdminUsers && (
           <section className="rounded-md border border-ez-line bg-white p-4">
-            <h2 className="font-semibold text-ez-navy">Benutzeranlage</h2>
+            <h2 className="font-semibold text-ez-navy">Benutzerverwaltung</h2>
             <p className="mt-2 text-sm leading-6 text-ez-muted">
-              Benutzer duerfen nur mit der Rolle SYSTEM_ADMIN angelegt oder mit Rollen versehen werden. HR_ADMIN verwaltet fachliche Daten,
-              hat aber bewusst keine technische Benutzeradministration.
+              Benutzer duerfen nur mit der Berechtigung users:admin angelegt, bearbeitet, deaktiviert oder mit Rollen versehen werden.
             </p>
-            <div className="mt-3 rounded bg-ez-petrol-50 p-3 text-sm text-ez-muted">
-              Fuer lokale Tests: als system.admin@example.local anmelden und dabei dieselbe URL verwenden, z. B. durchgaengig localhost:3000.
-            </div>
           </section>
         )}
         {canAdminRetention && <RetentionPolicyForm />}

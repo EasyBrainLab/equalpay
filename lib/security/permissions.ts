@@ -2,6 +2,7 @@ import type { RoleKey } from "@prisma/client";
 
 export type Permission =
   | "system:admin"
+  | "users:admin"
   | "security:admin"
   | "org:view"
   | "org:edit"
@@ -29,9 +30,10 @@ export type Permission =
   | "audit:view";
 
 export const ROLE_PERMISSIONS: Record<RoleKey, Permission[]> = {
-  SYSTEM_ADMIN: ["system:admin", "org:view", "audit:view"],
+  SYSTEM_ADMIN: ["system:admin", "users:admin", "org:view", "audit:view"],
   SECURITY_ADMIN: ["security:admin", "retention:admin", "audit:view"],
   HR_ADMIN: [
+    "users:admin",
     "org:view",
     "org:edit",
     "employees:view",
