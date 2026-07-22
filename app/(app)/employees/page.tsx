@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { EmployeeCreateForm, EmployeeImportForm } from "@/components/forms/hr-admin-forms";
+import { EmployeeCreateForm, EmployeeImportForm, EmployeeManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -27,8 +27,36 @@ export default async function EmployeesPage() {
       <PageHeader title="Mitarbeitende" description="Personenbezogene Daten sind auf das notwendige HR-Nutzungsniveau begrenzt. Analysen sollten pseudonymisiert erfolgen." />
       <main className="space-y-6 p-6">
         {canEdit && (
-          <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-            <EmployeeCreateForm
+          <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+              <EmployeeCreateForm
+                companies={companies.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+                segments={segments.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+                sites={sites.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+                departments={departments.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+                jobProfiles={jobProfiles.map((item) => ({ id: item.id, label: `${item.title} (${item.code})` }))}
+                payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))}
+              />
+              <EmployeeImportForm />
+            </div>
+            <EmployeeManageForm
+              employees={employees.map((item) => ({
+                id: item.id,
+                employeeNumber: item.employeeNumber,
+                displayName: item.displayName,
+                pseudonym: item.pseudonym,
+                companyId: item.companyId,
+                segmentId: item.segmentId,
+                siteId: item.siteId,
+                departmentId: item.departmentId,
+                gender: item.gender,
+                status: item.status,
+                fte: Number(item.fte),
+                weeklyHours: Number(item.weeklyHours),
+                fullTimeHours: Number(item.fullTimeHours),
+                jobProfileId: item.jobProfileId,
+                payGradeId: item.payGradeId,
+              }))}
               companies={companies.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
               segments={segments.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
               sites={sites.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
@@ -36,7 +64,6 @@ export default async function EmployeesPage() {
               jobProfiles={jobProfiles.map((item) => ({ id: item.id, label: `${item.title} (${item.code})` }))}
               payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))}
             />
-            <EmployeeImportForm />
           </div>
         )}
         <div className="overflow-hidden rounded-md border border-ez-line bg-white">

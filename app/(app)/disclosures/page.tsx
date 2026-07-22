@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { DisclosureResponseButton } from "@/components/forms/hr-admin-forms";
+import { DisclosureResponseButton, DisclosureManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -14,16 +14,33 @@ function tone(status: string) {
 export default async function DisclosuresPage() {
   const ctx = await requireAuth();
   const canEdit = hasPermission(ctx.roles, "disclosure:edit");
-  const requests = await prisma.disclosureRequest.findMany({
-    where: { tenantId: ctx.tenantId },
-    include: { responses: { orderBy: { generatedAt: "desc" }, take: 1 } },
-    orderBy: [{ status: "asc" }, { dueAt: "asc" }],
-  });
+  const [requests, employees] = await Promise.all([
+    prisma.disclosureRequest.findMany({
+      where: { tenantId: ctx.tenantId },
+      include: { responses: { orderBy: { generatedAt: "desc" }, take: 1 } },
+      orderBy: [{ status: "asc" }, { dueAt: "asc" }],
+    }),
+    prisma.employee.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { displayName: "asc" } }),
+  ]);
 
   return (
     <>
       <PageHeader title="Auskunftsanfragen" description="Fristen, Vergleichsgruppen, Datenschutzpruefung und Antwortstatus." />
-      <main className="p-6">
+      <main className="space-y-6 p-6">
+        {canEdit && (
+          <DisclosureManageForm
+            requests={requests.map((request) => ({
+              id: request.id,
+              requesterLabel: request.requesterLabel,
+              employeeId: request.employeeId,
+              comparisonGroup: request.comparisonGroup,
+              notes: request.notes,
+              status: request.status,
+              dueAt: request.dueAt.toISOString().slice(0, 10),
+            }))}
+            employees={employees.map((employee) => ({ id: employee.id, label: `${employee.displayName} (${employee.employeeNumber})` }))}
+          />
+        )}
         <div className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-ez-bg text-xs uppercase text-ez-muted">

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
+import { badRequest, forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
 import { requirePermission } from "@/lib/server/context";
 import { writeAuditLog } from "@/lib/server/audit";
 
@@ -11,6 +11,8 @@ const retentionSchema = z.object({
   legalBasis: z.string().min(1),
   active: z.boolean().default(true),
 });
+
+const retentionDeleteSchema = z.object({ id: z.string().min(1) });
 
 export async function GET() {
   const { ctx, error } = await requirePermission("retention:admin");
@@ -47,4 +49,24 @@ export async function POST(request: Request) {
     metadata: { entityType: policy.entityType, retentionDays: policy.retentionDays, action: policy.action },
   });
   return ok({ policyId: policy.id });
+}
+
+export async function DELETE(request: Request) {
+  const { ctx, error } = await requirePermission("retention:admin");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const { id } = await readJson(request, retentionDeleteSchema);
+  const existing = await prisma.retentionPolicy.findFirst({ where: { id, tenantId: ctx.tenantId } });
+  if (!existing) return badRequest("Retention Policy nicht gefunden");
+  await prisma.retentionPolicy.delete({ where: { id } });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "retention-policy.delete",
+    entityType: "RetentionPolicy",
+    entityId: id,
+    severity: "CRITICAL",
+    metadata: { entityType: existing.entityType },
+  });
+  return ok({ deleted: id });
 }

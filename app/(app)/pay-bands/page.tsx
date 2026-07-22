@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/layout/page-header";
-import { SalaryBandForm } from "@/components/forms/hr-admin-forms";
+import { SalaryBandForm, SalaryBandManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoney } from "@/lib/domain/money";
 import { requireAuth } from "@/lib/auth/session";
@@ -21,7 +21,26 @@ export default async function PayBandsPage() {
     <>
       <PageHeader title="Gehaltsbaender" description="Min/Mid/Max je Grade. Individuelle Gehaelter bleiben verschluesselt und werden hier nicht angezeigt." />
       <main className="space-y-6 p-6">
-        {canEdit && <SalaryBandForm payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))} />}
+        {canEdit && (
+          <div className="space-y-6">
+            <SalaryBandForm payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))} />
+            <SalaryBandManageForm
+              bands={bands.map((band) => ({
+                id: band.id,
+                payGradeId: band.payGradeId,
+                name: band.name,
+                currency: band.currency,
+                fullTimeHours: Number(band.fullTimeHours),
+                minAmount: band.minAmount,
+                midAmount: band.midAmount,
+                maxAmount: band.maxAmount,
+                validFrom: band.validFrom.toISOString().slice(0, 10),
+                validTo: band.validTo ? band.validTo.toISOString().slice(0, 10) : null,
+              }))}
+              payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))}
+            />
+          </div>
+        )}
         <div className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-ez-bg text-xs uppercase text-ez-muted">

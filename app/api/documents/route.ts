@@ -1,16 +1,28 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
-import { forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
+import { badRequest, forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
 import { requirePermission } from "@/lib/server/context";
 import { writeAuditLog } from "@/lib/server/audit";
 
+const documentTypeEnum = z.enum(["POLICY", "WORKS_AGREEMENT", "JOB_PROFILE", "LEGAL_MEMO", "REPORT", "OFFER", "TEMPLATE", "OTHER"]);
+const sensitivityEnum = z.enum([
+  "PUBLIC_CONFIG", "HR_STRUCTURAL", "PERSONAL_BASIC", "PERSONAL_SENSITIVE", "PAY_SENSITIVE", "PAY_ANALYTICS", "LEGAL_CONFIDENTIAL", "SECURITY",
+]);
+
 const documentSchema = z.object({
   title: z.string().min(1),
-  type: z.enum(["POLICY", "WORKS_AGREEMENT", "JOB_PROFILE", "LEGAL_MEMO", "REPORT", "OFFER", "TEMPLATE", "OTHER"]),
-  sensitivity: z
-    .enum(["PUBLIC_CONFIG", "HR_STRUCTURAL", "PERSONAL_BASIC", "PERSONAL_SENSITIVE", "PAY_SENSITIVE", "PAY_ANALYTICS", "LEGAL_CONFIDENTIAL", "SECURITY"])
-    .default("HR_STRUCTURAL"),
+  type: documentTypeEnum,
+  sensitivity: sensitivityEnum.default("HR_STRUCTURAL"),
 });
+
+const documentUpdateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  type: documentTypeEnum,
+  sensitivity: sensitivityEnum,
+});
+
+const documentDeleteSchema = z.object({ id: z.string().min(1) });
 
 export async function GET() {
   const { ctx, error } = await requirePermission("documents:view");
@@ -40,4 +52,45 @@ export async function POST(request: Request) {
     metadata: { title: document.title, type: document.type, sensitivity: document.sensitivity },
   });
   return ok({ document });
+}
+
+export async function PATCH(request: Request) {
+  const { ctx, error } = await requirePermission("documents:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const input = await readJson(request, documentUpdateSchema);
+  const existing = await prisma.document.findFirst({ where: { id: input.id, tenantId: ctx.tenantId } });
+  if (!existing) return badRequest("Dokument nicht gefunden");
+  const { id, ...data } = input;
+  const document = await prisma.document.update({ where: { id }, data });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "document.update",
+    entityType: "Document",
+    entityId: document.id,
+    severity: document.sensitivity.includes("PAY") || document.sensitivity.includes("LEGAL") ? "WARNING" : "INFO",
+    metadata: { title: document.title, type: document.type, sensitivity: document.sensitivity },
+  });
+  return ok({ document });
+}
+
+export async function DELETE(request: Request) {
+  const { ctx, error } = await requirePermission("documents:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const { id } = await readJson(request, documentDeleteSchema);
+  const existing = await prisma.document.findFirst({ where: { id, tenantId: ctx.tenantId } });
+  if (!existing) return badRequest("Dokument nicht gefunden");
+  await prisma.document.delete({ where: { id } });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "document.delete",
+    entityType: "Document",
+    entityId: id,
+    severity: "WARNING",
+    metadata: { title: existing.title, type: existing.type },
+  });
+  return ok({ deleted: id });
 }
