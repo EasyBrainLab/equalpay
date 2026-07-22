@@ -1315,6 +1315,174 @@ export function DisclosureManageForm({ requests, employees }: { requests: Disclo
   );
 }
 
+const reportStatuses = ["DRAFT", "GENERATED", "APPROVED", "SUBMITTED", "ARCHIVED"] as const;
+const evaluationStatuses = ["DRAFT", "IN_REVIEW", "APPROVED", "ARCHIVED"] as const;
+
+type CompensationRow = {
+  id: string;
+  label: string;
+  type: string;
+  compLabel: string;
+  currency: string;
+  validFrom: string;
+  validTo: string | null;
+  legalBasis: string;
+  objectiveReason: string;
+};
+
+export function CompensationManageForm({ components }: { components: CompensationRow[] }) {
+  const { selectedId, setSelectedId, busy, message, error, selected, run } = useManageState(components);
+  if (!selected) return <ManagePanel title="Verguetung bearbeiten" description="Bestehende Verguetungsbestandteile aendern oder loeschen." rows={components} optionLabel={() => ""} selectedId="" setSelectedId={setSelectedId}><div /></ManagePanel>;
+  return (
+    <ManagePanel title="Verguetung bearbeiten" description="Bestehende Verguetungsbestandteile aendern oder loeschen. Der Betrag wird beim Speichern neu verschluesselt und erneut zur Freigabe gestellt." rows={components} optionLabel={(row) => row.label} selectedId={selectedId} setSelectedId={setSelectedId} message={message} error={error}>
+      <form
+        key={selected.id}
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void run(async () => {
+            await requestJson("/api/compensation", "PATCH", {
+              id: selected.id,
+              type: String(data.get("type")),
+              label: String(data.get("label")),
+              amountCents: moneyToCents(data.get("amount")),
+              currency: String(data.get("currency") || "EUR"),
+              validFrom: isoDate(data.get("validFrom")),
+              validTo: optional(data.get("validTo")) ? isoDate(data.get("validTo")) : null,
+              legalBasis: optional(data.get("legalBasis")) ?? null,
+              objectiveReason: optional(data.get("objectiveReason")) ?? null,
+            });
+          }, "Verguetung aktualisiert.");
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Art"><select className={inputClass} name="type" defaultValue={selected.type}>{compensationTypes.map((item) => <option key={item}>{item}</option>)}</select></Field>
+          <Field label="Label"><input className={inputClass} name="label" defaultValue={selected.compLabel} required /></Field>
+          <Field label="Neuer Betrag (Pflicht)"><input className={inputClass} name="amount" inputMode="decimal" placeholder="bisheriger Betrag ist verschluesselt" required /></Field>
+          <Field label="Waehrung"><input className={inputClass} name="currency" defaultValue={selected.currency} minLength={3} maxLength={3} required /></Field>
+          <Field label="Gueltig ab"><input className={inputClass} name="validFrom" type="date" defaultValue={selected.validFrom} required /></Field>
+          <Field label="Gueltig bis"><input className={inputClass} name="validTo" type="date" defaultValue={selected.validTo ?? ""} /></Field>
+          <Field label="Rechts-/Regelbasis"><input className={inputClass} name="legalBasis" defaultValue={selected.legalBasis} /></Field>
+        </div>
+        <Field label="Objektiver Grund"><textarea className={inputClass} name="objectiveReason" rows={2} defaultValue={selected.objectiveReason} /></Field>
+        <div className="flex flex-wrap gap-2">
+          <SubmitButton icon={<Pencil size={16} />} label="Verguetung aktualisieren" busy={busy} />
+          <DeleteButton label="Verguetung loeschen" busy={busy} onClick={() => { if (!window.confirm(`Verguetungsbestandteil "${selected.label}" loeschen?`)) return; void run(async () => { await requestJson("/api/compensation", "DELETE", { id: selected.id }); setSelectedId(""); }, "Verguetung geloescht."); }} />
+        </div>
+      </form>
+    </ManagePanel>
+  );
+}
+
+type ReportRow = { id: string; name: string; status: string };
+
+export function ReportManageForm({ reports }: { reports: ReportRow[] }) {
+  const { selectedId, setSelectedId, busy, message, error, selected, run } = useManageState(reports);
+  if (!selected) return <ManagePanel title="Report bearbeiten" description="Name/Status aendern oder Report loeschen." rows={reports} optionLabel={() => ""} selectedId="" setSelectedId={setSelectedId}><div /></ManagePanel>;
+  return (
+    <ManagePanel title="Report bearbeiten" description="Name und Status aendern oder Report loeschen (eingereichte Reports bleiben erhalten)." rows={reports} optionLabel={(row) => row.name} selectedId={selectedId} setSelectedId={setSelectedId} message={message} error={error}>
+      <form
+        key={selected.id}
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void run(async () => {
+            await requestJson("/api/reports", "PATCH", {
+              id: selected.id,
+              name: String(data.get("name")),
+              status: String(data.get("status")),
+            });
+          }, "Report aktualisiert.");
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Name"><input className={inputClass} name="name" defaultValue={selected.name} required /></Field>
+          <Field label="Status"><select className={inputClass} name="status" defaultValue={selected.status}>{reportStatuses.map((item) => <option key={item}>{item}</option>)}</select></Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <SubmitButton icon={<Pencil size={16} />} label="Report aktualisieren" busy={busy} />
+          <DeleteButton label="Report loeschen" busy={busy} onClick={() => { if (!window.confirm(`Report "${selected.name}" loeschen?`)) return; void run(async () => { await requestJson("/api/reports", "DELETE", { id: selected.id }); setSelectedId(""); }, "Report geloescht."); }} />
+        </div>
+      </form>
+    </ManagePanel>
+  );
+}
+
+type JobProfileRow = {
+  id: string;
+  label: string;
+  title: string;
+  code: string;
+  status: string;
+  jobFamilyId: string | null;
+  comparisonGroupId: string | null;
+  payGradeId: string | null;
+  summary: string;
+  responsibilities: string;
+  requirements: string;
+};
+
+export function JobProfileManageForm({
+  profiles,
+  jobFamilies,
+  comparisonGroups,
+  payGrades,
+}: {
+  profiles: JobProfileRow[];
+  jobFamilies: Option[];
+  comparisonGroups: Option[];
+  payGrades: Option[];
+}) {
+  const { selectedId, setSelectedId, busy, message, error, selected, run } = useManageState(profiles);
+  if (!selected) return <ManagePanel title="Stellenprofil bearbeiten" description="Bestehende Stellenprofile aendern oder loeschen." rows={profiles} optionLabel={() => ""} selectedId="" setSelectedId={setSelectedId}><div /></ManagePanel>;
+  return (
+    <ManagePanel title="Stellenprofil bearbeiten" description="Stammdaten, Zuordnung und Status bestehender Stellenprofile aendern oder loeschen." rows={profiles} optionLabel={(row) => row.label} selectedId={selectedId} setSelectedId={setSelectedId} message={message} error={error}>
+      <form
+        key={selected.id}
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void run(async () => {
+            await requestJson("/api/job-profiles", "PATCH", {
+              id: selected.id,
+              title: String(data.get("title")),
+              code: String(data.get("code")),
+              jobFamilyId: optional(data.get("jobFamilyId")) ?? null,
+              comparisonGroupId: optional(data.get("comparisonGroupId")) ?? null,
+              payGradeId: optional(data.get("payGradeId")) ?? null,
+              summary: optional(data.get("summary")) ?? null,
+              responsibilities: optional(data.get("responsibilities")) ?? null,
+              requirements: optional(data.get("requirements")) ?? null,
+              status: String(data.get("status")),
+            });
+          }, "Stellenprofil aktualisiert.");
+        }}
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Rolle"><input className={inputClass} name="title" defaultValue={selected.title} required /></Field>
+          <Field label="Code"><input className={inputClass} name="code" defaultValue={selected.code} required /></Field>
+          <Field label="Jobfamilie"><select className={inputClass} name="jobFamilyId" defaultValue={selected.jobFamilyId ?? ""}><option value="">-</option>{jobFamilies.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+          <Field label="Vergleichsgruppe"><select className={inputClass} name="comparisonGroupId" defaultValue={selected.comparisonGroupId ?? ""}><option value="">-</option>{comparisonGroups.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+          <Field label="Grade"><select className={inputClass} name="payGradeId" defaultValue={selected.payGradeId ?? ""}><option value="">-</option>{payGrades.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></Field>
+          <Field label="Status"><select className={inputClass} name="status" defaultValue={selected.status}>{evaluationStatuses.map((item) => <option key={item}>{item}</option>)}</select></Field>
+        </div>
+        <Field label="Kurzbeschreibung"><textarea className={inputClass} name="summary" rows={2} defaultValue={selected.summary} /></Field>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Aufgaben"><textarea className={inputClass} name="responsibilities" rows={3} defaultValue={selected.responsibilities} /></Field>
+          <Field label="Anforderungen"><textarea className={inputClass} name="requirements" rows={3} defaultValue={selected.requirements} /></Field>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <SubmitButton icon={<Pencil size={16} />} label="Stellenprofil aktualisieren" busy={busy} />
+          <DeleteButton label="Stellenprofil loeschen" busy={busy} onClick={() => { if (!window.confirm(`Stellenprofil "${selected.label}" loeschen?`)) return; void run(async () => { await requestJson("/api/job-profiles", "DELETE", { id: selected.id }); setSelectedId(""); }, "Stellenprofil geloescht."); }} />
+        </div>
+      </form>
+    </ManagePanel>
+  );
+}
+
 export function RetentionPolicyForm() {
   const state = useSubmitState();
   return (
