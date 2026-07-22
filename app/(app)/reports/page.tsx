@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { ReportGenerateForm } from "@/components/forms/hr-admin-forms";
+import { ReportGenerateForm, ReportManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -19,7 +19,12 @@ export default async function ReportsPage() {
     <>
       <PageHeader title="Reports" description="Art.-9-Reporting, interne Dry-Runs und exportierbare Compliance-Artefakte." />
       <main className="space-y-6 p-6">
-        {canGenerate && <ReportGenerateForm />}
+        {canGenerate && (
+          <div className="space-y-6">
+            <ReportGenerateForm />
+            <ReportManageForm reports={reports.map((report) => ({ id: report.id, name: report.name, status: report.status }))} />
+          </div>
+        )}
         <section className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-ez-bg text-xs uppercase text-ez-muted">

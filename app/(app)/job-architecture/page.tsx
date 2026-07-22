@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { JobProfileEvaluationForm } from "@/components/forms/hr-admin-forms";
+import { JobProfileEvaluationForm, JobProfileManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -9,7 +9,7 @@ import { hasPermission } from "@/lib/security/permissions";
 export default async function JobArchitecturePage() {
   const ctx = await requireAuth();
   const canEdit = hasPermission(ctx.roles, "job:edit");
-  const [profiles, criteria, jobFamilies, comparisonGroups] = await Promise.all([
+  const [profiles, criteria, jobFamilies, comparisonGroups, payGrades] = await Promise.all([
     prisma.jobProfile.findMany({
       where: { tenantId: ctx.tenantId },
       include: { jobFamily: true, payGrade: true, comparisonGroup: true },
@@ -18,6 +18,7 @@ export default async function JobArchitecturePage() {
     prisma.evaluationCriterion.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { sortOrder: "asc" } }),
     prisma.jobFamily.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { name: "asc" } }),
     prisma.comparisonGroup.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { name: "asc" } }),
+    prisma.payGrade.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   return (
@@ -35,11 +36,29 @@ export default async function JobArchitecturePage() {
       />
       <main className="grid gap-6 p-6 xl:grid-cols-[1fr_360px]">
         {canEdit && (
-          <div className="xl:col-span-2">
+          <div className="space-y-6 xl:col-span-2">
             <JobProfileEvaluationForm
               jobFamilies={jobFamilies.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
               comparisonGroups={comparisonGroups.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
               criteria={criteria.map((item) => ({ id: item.id, label: item.name, weight: item.weight }))}
+            />
+            <JobProfileManageForm
+              profiles={profiles.map((profile) => ({
+                id: profile.id,
+                label: `${profile.code} · ${profile.title}`,
+                title: profile.title,
+                code: profile.code,
+                status: profile.status,
+                jobFamilyId: profile.jobFamilyId,
+                comparisonGroupId: profile.comparisonGroupId,
+                payGradeId: profile.payGradeId,
+                summary: profile.summary ?? "",
+                responsibilities: profile.responsibilities ?? "",
+                requirements: profile.requirements ?? "",
+              }))}
+              jobFamilies={jobFamilies.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+              comparisonGroups={comparisonGroups.map((item) => ({ id: item.id, label: `${item.name} (${item.code})` }))}
+              payGrades={payGrades.map((item) => ({ id: item.id, label: `${item.code} · ${item.name}` }))}
             />
           </div>
         )}

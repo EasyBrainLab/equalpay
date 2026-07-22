@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { CompensationForm } from "@/components/forms/hr-admin-forms";
+import { CompensationForm, CompensationManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -53,13 +53,30 @@ export default async function CompensationPage() {
       />
       <main className="space-y-6 p-6">
         {canEditPay && (
-          <CompensationForm
-            employees={employees.map((item) => ({
-              id: item.id,
-              label: `${item.displayName} (${item.employeeNumber})`,
-              meta: `${item.payGrade?.code ?? "-"} · ${item.jobProfile?.title ?? "ohne Rolle"}`,
-            }))}
-          />
+          <div className="space-y-6">
+            <CompensationForm
+              employees={employees.map((item) => ({
+                id: item.id,
+                label: `${item.displayName} (${item.employeeNumber})`,
+                meta: `${item.payGrade?.code ?? "-"} · ${item.jobProfile?.title ?? "ohne Rolle"}`,
+              }))}
+            />
+            {canViewPay && (
+              <CompensationManageForm
+                components={components.map((component) => ({
+                  id: component.id,
+                  label: `${component.employee.displayName} · ${component.type} · ${component.label}`,
+                  type: component.type,
+                  compLabel: component.label,
+                  currency: component.currency,
+                  validFrom: component.validFrom.toISOString().slice(0, 10),
+                  validTo: component.validTo ? component.validTo.toISOString().slice(0, 10) : null,
+                  legalBasis: component.legalBasis ?? "",
+                  objectiveReason: component.objectiveReason ?? "",
+                }))}
+              />
+            )}
+          </div>
         )}
         {!canViewPay && (
           <div className="rounded-md border border-ez-line bg-white p-6 text-sm text-ez-muted">
