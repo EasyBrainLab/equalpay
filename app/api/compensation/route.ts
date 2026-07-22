@@ -2,24 +2,26 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { decryptField, encryptField, moneyLast4 } from "@/lib/security/crypto";
 import { hasPermission } from "@/lib/security/permissions";
-import { forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
+import { badRequest, forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
 import { requirePermission } from "@/lib/server/context";
 import { writeAuditLog } from "@/lib/server/audit";
 import { formatMoney } from "@/lib/domain/money";
 
+const compensationTypeEnum = z.enum([
+  "BASE_SALARY",
+  "VARIABLE_PAY",
+  "BONUS",
+  "ALLOWANCE",
+  "BENEFIT",
+  "COMPANY_CAR",
+  "PENSION",
+  "SPECIAL_PAYMENT",
+  "ONE_TIME_PAYMENT",
+]);
+
 const compensationSchema = z.object({
   employeeId: z.string().min(1),
-  type: z.enum([
-    "BASE_SALARY",
-    "VARIABLE_PAY",
-    "BONUS",
-    "ALLOWANCE",
-    "BENEFIT",
-    "COMPANY_CAR",
-    "PENSION",
-    "SPECIAL_PAYMENT",
-    "ONE_TIME_PAYMENT",
-  ]),
+  type: compensationTypeEnum,
   label: z.string().min(1),
   amountCents: z.number().int(),
   currency: z.string().length(3).default("EUR"),
@@ -28,6 +30,20 @@ const compensationSchema = z.object({
   legalBasis: z.string().optional(),
   objectiveReason: z.string().optional(),
 });
+
+const compensationUpdateSchema = z.object({
+  id: z.string().min(1),
+  type: compensationTypeEnum,
+  label: z.string().min(1),
+  amountCents: z.number().int(),
+  currency: z.string().length(3),
+  validFrom: z.coerce.date(),
+  validTo: z.coerce.date().nullable().optional(),
+  legalBasis: z.string().nullable().optional(),
+  objectiveReason: z.string().nullable().optional(),
+});
+
+const compensationDeleteSchema = z.object({ id: z.string().min(1) });
 
 export async function GET() {
   const { ctx, error } = await requirePermission("pay:view");
@@ -134,4 +150,64 @@ export async function POST(request: Request) {
   });
 
   return ok({ componentId: component.id, approvalStatus: component.approvalStatus });
+}
+
+export async function PATCH(request: Request) {
+  const { ctx, error } = await requirePermission("pay:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const input = await readJson(request, compensationUpdateSchema);
+  const existing = await prisma.compensationComponent.findFirst({
+    where: { id: input.id, tenantId: ctx.tenantId },
+  });
+  if (!existing) return badRequest("Verguetungsbestandteil nicht gefunden");
+  // Betrag beim Ändern neu verschlüsseln (AAD an Mandant/Mitarbeiter/Art gebunden).
+  const encrypted = encryptField(String(input.amountCents), `${ctx.tenantId}:${existing.employeeId}:${input.type}`);
+  const component = await prisma.compensationComponent.update({
+    where: { id: input.id },
+    data: {
+      type: input.type,
+      label: input.label,
+      amountCiphertext: encrypted.ciphertext,
+      amountKeyId: encrypted.keyId,
+      amountLast4: moneyLast4(input.amountCents),
+      currency: input.currency,
+      validFrom: input.validFrom,
+      validTo: input.validTo ?? null,
+      legalBasis: input.legalBasis ?? null,
+      objectiveReason: input.objectiveReason ?? null,
+      // Geänderter Betrag erfordert erneute Freigabe.
+      approvalStatus: "PENDING",
+    },
+  });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "compensation.update",
+    entityType: "CompensationComponent",
+    entityId: component.id,
+    severity: "WARNING",
+    metadata: { type: component.type, employeeId: existing.employeeId, amountLast4: component.amountLast4 },
+  });
+  return ok({ componentId: component.id, approvalStatus: component.approvalStatus });
+}
+
+export async function DELETE(request: Request) {
+  const { ctx, error } = await requirePermission("pay:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const { id } = await readJson(request, compensationDeleteSchema);
+  const existing = await prisma.compensationComponent.findFirst({ where: { id, tenantId: ctx.tenantId } });
+  if (!existing) return badRequest("Verguetungsbestandteil nicht gefunden");
+  await prisma.compensationComponent.delete({ where: { id } });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "compensation.delete",
+    entityType: "CompensationComponent",
+    entityId: id,
+    severity: "CRITICAL",
+    metadata: { type: existing.type, employeeId: existing.employeeId, amountLast4: existing.amountLast4 },
+  });
+  return ok({ deleted: id });
 }

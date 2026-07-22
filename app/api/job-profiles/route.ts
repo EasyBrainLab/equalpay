@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { calculateEvaluationPoints, gradeForPoints } from "@/lib/domain/evaluation";
-import { forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
+import { badRequest, forbidden, ok, readJson, unauthorized } from "@/lib/server/api";
 import { requirePermission } from "@/lib/server/context";
 import { writeAuditLog } from "@/lib/server/audit";
 
@@ -15,6 +16,21 @@ const jobProfileSchema = z.object({
   requirements: z.string().optional(),
   scores: z.array(z.object({ criterionId: z.string(), score: z.number().int().min(1).max(5) })).optional(),
 });
+
+const jobProfileUpdateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  code: z.string().min(1),
+  jobFamilyId: z.string().nullable().optional(),
+  comparisonGroupId: z.string().nullable().optional(),
+  payGradeId: z.string().nullable().optional(),
+  summary: z.string().nullable().optional(),
+  responsibilities: z.string().nullable().optional(),
+  requirements: z.string().nullable().optional(),
+  status: z.enum(["DRAFT", "IN_REVIEW", "APPROVED", "ARCHIVED"]),
+});
+
+const jobProfileDeleteSchema = z.object({ id: z.string().min(1) });
 
 export async function GET() {
   const { ctx, error } = await requirePermission("job:view");
@@ -91,4 +107,58 @@ export async function POST(request: Request) {
     metadata: { code: jobProfile.code, points, payGrade: jobProfile.payGrade?.code ?? null },
   });
   return ok({ jobProfile });
+}
+
+export async function PATCH(request: Request) {
+  const { ctx, error } = await requirePermission("job:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const input = await readJson(request, jobProfileUpdateSchema);
+  const existing = await prisma.jobProfile.findFirst({ where: { id: input.id, tenantId: ctx.tenantId } });
+  if (!existing) return badRequest("Stellenprofil nicht gefunden");
+  const { id, ...data } = input;
+  try {
+    const jobProfile = await prisma.jobProfile.update({ where: { id }, data });
+    await writeAuditLog({
+      tenantId: ctx.tenantId,
+      userId: ctx.user.id,
+      action: "job-profile.update",
+      entityType: "JobProfile",
+      entityId: jobProfile.id,
+      severity: "WARNING",
+      metadata: { code: jobProfile.code, status: jobProfile.status },
+    });
+    return ok({ jobProfile });
+  } catch (caught) {
+    if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === "P2002") {
+      return badRequest("Code/Version ist bereits vergeben.");
+    }
+    throw caught;
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { ctx, error } = await requirePermission("job:edit");
+  if (error === "unauthorized") return unauthorized();
+  if (error === "forbidden") return forbidden();
+  const { id } = await readJson(request, jobProfileDeleteSchema);
+  const existing = await prisma.jobProfile.findFirst({
+    where: { id, tenantId: ctx.tenantId },
+    include: { _count: { select: { employees: true } } },
+  });
+  if (!existing) return badRequest("Stellenprofil nicht gefunden");
+  if (existing._count.employees > 0) {
+    return badRequest("Stellenprofil ist Mitarbeitenden zugeordnet und kann nicht gelöscht werden. Bitte zuerst die Zuordnung ändern.");
+  }
+  await prisma.jobProfile.delete({ where: { id } });
+  await writeAuditLog({
+    tenantId: ctx.tenantId,
+    userId: ctx.user.id,
+    action: "job-profile.delete",
+    entityType: "JobProfile",
+    entityId: id,
+    severity: "CRITICAL",
+    metadata: { code: existing.code },
+  });
+  return ok({ deleted: id });
 }

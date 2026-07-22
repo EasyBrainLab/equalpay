@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { RemediationForm } from "@/components/forms/hr-admin-forms";
+import { RemediationForm, RemediationManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -30,10 +30,27 @@ export default async function RemediationPage() {
       <PageHeader title="Massnahmen" description="Abhilfe, Ursachenanalyse und Nachverfolgung fuer ungeklärte Pay-Gap-Trigger." />
       <main className="space-y-6 p-6">
         {canEdit && (
-          <RemediationForm
-            payGapRows={rows.map((row) => ({ id: row.id, label: `${row.groupLabel} · ${Number(row.averageGapPercent).toFixed(2)}%` }))}
-            users={users.map((user) => ({ id: user.id, label: user.name, email: user.email }))}
-          />
+          <div className="space-y-6">
+            <RemediationForm
+              payGapRows={rows.map((row) => ({ id: row.id, label: `${row.groupLabel} · ${Number(row.averageGapPercent).toFixed(2)}%` }))}
+              users={users.map((user) => ({ id: user.id, label: user.name, email: user.email }))}
+            />
+            <RemediationManageForm
+              actions={actions.map((action) => ({
+                id: action.id,
+                payGapRowId: action.payGapRowId,
+                title: action.title,
+                description: action.description,
+                rootCause: action.rootCause,
+                objectiveReason: action.objectiveReason,
+                ownerUserId: action.ownerUserId,
+                dueAt: action.dueAt.toISOString().slice(0, 10),
+                status: action.status,
+              }))}
+              payGapRows={rows.map((row) => ({ id: row.id, label: `${row.groupLabel} · ${Number(row.averageGapPercent).toFixed(2)}%` }))}
+              users={users.map((user) => ({ id: user.id, label: user.name, email: user.email }))}
+            />
+          </div>
         )}
         <section className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">

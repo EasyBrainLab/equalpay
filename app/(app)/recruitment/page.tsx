@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { RecruitmentPostingForm } from "@/components/forms/hr-admin-forms";
+import { RecruitmentPostingForm, RecruitmentManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { formatMoney } from "@/lib/domain/money";
 import { requireAuth } from "@/lib/auth/session";
@@ -18,7 +18,27 @@ export default async function RecruitmentPage() {
     <>
       <PageHeader title="Recruiting" description="Einstiegsentgelt, Entgeltspanne und Bewerbungsprozess-Pflichten dokumentieren." />
       <main className="space-y-6 p-6">
-        {canEdit && <RecruitmentPostingForm jobProfiles={jobProfiles.map((item) => ({ id: item.id, label: `${item.title} (${item.code})` }))} />}
+        {canEdit && (
+          <div className="space-y-6">
+            <RecruitmentPostingForm jobProfiles={jobProfiles.map((item) => ({ id: item.id, label: `${item.title} (${item.code})` }))} />
+            <RecruitmentManageForm
+              postings={postings.map((posting) => ({
+                id: posting.id,
+                jobProfileId: posting.jobProfileId,
+                title: posting.title,
+                location: posting.location,
+                salaryMinAmount: posting.salaryMinAmount,
+                salaryMaxAmount: posting.salaryMaxAmount,
+                currency: posting.currency,
+                payTransparencyText: posting.payTransparencyText,
+                genderNeutralCheck: posting.genderNeutralCheck,
+                priorPayQuestionBan: posting.priorPayQuestionBan,
+                status: posting.status,
+              }))}
+              jobProfiles={jobProfiles.map((item) => ({ id: item.id, label: `${item.title} (${item.code})` }))}
+            />
+          </div>
+        )}
         <section className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-ez-bg text-xs uppercase text-ez-muted">

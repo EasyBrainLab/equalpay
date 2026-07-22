@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { DocumentUploadForm } from "@/components/forms/hr-admin-forms";
+import { DocumentUploadForm, DocumentManageForm } from "@/components/forms/hr-admin-forms";
 import { prisma } from "@/lib/db/prisma";
 import { requireAuth } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/security/permissions";
@@ -18,7 +18,19 @@ export default async function DocumentsPage() {
     <>
       <PageHeader title="Dokumente" description="Policies, Betriebsvereinbarungen, Legal-Memos und Reporting-Artefakte mit Sensitivitaetsklassen." />
       <main className="space-y-6 p-6">
-        {canEdit && <DocumentUploadForm />}
+        {canEdit && (
+          <div className="space-y-6">
+            <DocumentUploadForm />
+            <DocumentManageForm
+              documents={documents.map((document) => ({
+                id: document.id,
+                title: document.title,
+                type: document.type,
+                sensitivity: document.sensitivity,
+              }))}
+            />
+          </div>
+        )}
         <div className="overflow-hidden rounded-md border border-ez-line bg-white">
           <table className="w-full text-left text-sm">
             <thead className="bg-ez-bg text-xs uppercase text-ez-muted">
