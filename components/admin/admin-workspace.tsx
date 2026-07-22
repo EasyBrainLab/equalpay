@@ -60,22 +60,99 @@ function Metric({ label, value, hint, tone = "neutral" }: { label: string; value
   return <div className={`rounded-md border border-t-4 border-ez-line ${borderClass} bg-white p-4`}><div className="text-2xl font-semibold text-ez-navy">{value}</div><div className="mt-1 text-sm font-medium text-ez-navy">{label}</div><div className="mt-1 text-xs leading-5 text-ez-muted">{hint}</div></div>;
 }
 
+type AdminTask = {
+  id: string;
+  title: string;
+  summary: string;
+  purpose: string;
+  steps: string[];
+  checks: string[];
+  artifactTitle: string;
+  artifactSections: [string, string][];
+};
+
+const adminTasks: AdminTask[] = [
+  {
+    id: "users",
+    title: "Benutzer verwalten",
+    summary: "Benutzer suchen, Stammdaten bearbeiten, Passwoerter zuruecksetzen und Accounts deaktivieren.",
+    purpose: "Sicherstellen, dass nur berechtigte Personen Zugriff auf das Testsystem und spaeter auf produktive HR-Daten erhalten.",
+    steps: ["Benutzer im Verzeichnis suchen oder ueber Filter eingrenzen.", "Datensatz auswaehlen und Stammdaten, Provider sowie Status pruefen.", "Bei lokalen Konten bei Bedarf ein neues Passwort setzen.", "Nicht mehr benoetigte Konten deaktivieren statt hart zu loeschen."],
+    checks: ["Ist der Benutzer eindeutig identifiziert?", "Ist der Status ACTIVE nur fuer benoetigte Konten gesetzt?", "Wurde bei Passwort-Reset ein temporaeres Passwort sicher kommuniziert?"],
+    artifactTitle: "Screenshot-Artefakt: Benutzerverzeichnis und Detailbereich",
+    artifactSections: [["1", "Benutzer suchen und filtern"], ["2", "Datensatz rechts bearbeiten"], ["3", "Speichern, Reset oder Deaktivierung protokollieren"]],
+  },
+  {
+    id: "roles",
+    title: "Rollen pruefen",
+    summary: "Zugriffe nach Need-to-know vergeben; kritische Rollen sind im Audit Trail nachvollziehbar.",
+    purpose: "Rollen so vergeben, dass HR-Arbeit moeglich ist, ohne unnoetige Einsicht in sensible Verguetungs- oder Sicherheitsdaten zu schaffen.",
+    steps: ["Benutzer auswaehlen und aktuelle Rollen lesen.", "Aufgabe des Benutzers mit der Rollenbeschreibung vergleichen.", "Nur erforderliche Rollen aktivieren.", "Kritische Rollen separat pruefen und nach der Aenderung im Audit Trail kontrollieren."],
+    checks: ["Hat der Benutzer wirklich eine fachliche Aufgabe fuer diese Rolle?", "Sind SYSTEM_ADMIN und SECURITY_ADMIN getrennt?", "Ist HR_ADMIN bewusst vergeben und dokumentiert?"],
+    artifactTitle: "Screenshot-Artefakt: Rollenmatrix mit kritischen Markierungen",
+    artifactSections: [["A", "Rolle auswaehlen"], ["B", "Beschreibung lesen"], ["C", "Auditpflichtige Aenderung speichern"]],
+  },
+  {
+    id: "onboarding",
+    title: "Onboarding kontrollieren",
+    summary: "Schulungsnachweise fuer sensible HR- und Verguetungsdaten pruefen.",
+    purpose: "Nachweisen, dass Benutzer vor der Arbeit mit sensiblen Daten ausreichend eingewiesen wurden.",
+    steps: ["Tab Onboarding oeffnen und offene Nachweise anzeigen.", "Benutzer mit weniger als 100 Prozent Abschluss identifizieren.", "Betroffene Benutzer zur In-App-Schulung auffordern.", "Nach Abschluss den neuesten Nachweis im Audit-Kontext pruefen."],
+    checks: ["Sind alle aktiven HR- und Compensation-Benutzer geschult?", "Passt die Modulversion zur aktuellen Prozessversion?", "Sind offene Nachweise vor Kundendemonstrationen erklaert?"],
+    artifactTitle: "Screenshot-Artefakt: Onboarding-Kontrollliste",
+    artifactSections: [["1", "Offene Nachweise filtern"], ["2", "Modulfortschritt pruefen"], ["3", "Letzten Nachweis dokumentieren"]],
+  },
+  {
+    id: "retention",
+    title: "Retention steuern",
+    summary: "Aufbewahrungs-, Review-, Anonymisierungs- und Legal-Hold-Regeln transparent verwalten.",
+    purpose: "DSGVO- und Compliance-Anforderungen fuer Aufbewahrung und Loeschkonzepte nachvollziehbar operationalisieren.",
+    steps: ["Retention-Tab oeffnen und aktive Regeln pruefen.", "Objekttyp, Frist, Aktion und Rechtsgrundlage lesen.", "Abweichungen zwischen HR-Anforderung und Regelwerk markieren.", "Aenderungen nur nach fachlicher und rechtlicher Freigabe umsetzen."],
+    checks: ["Existiert fuer sensible Datentypen eine Regel?", "Ist die Rechtsgrundlage sprechend dokumentiert?", "Sind Legal-Hold-Faelle von Loeschregeln getrennt?"],
+    artifactTitle: "Screenshot-Artefakt: Retention-Regelwerk",
+    artifactSections: [["1", "Objekttyp"], ["2", "Frist und Aktion"], ["3", "Rechtsgrundlage"]],
+  },
+  {
+    id: "audit",
+    title: "Audit auswerten",
+    summary: "Kritische administrative Aktionen und Sicherheitsereignisse zeitnah nachvollziehen.",
+    purpose: "Sichtbar machen, wer wann sicherheits- oder compliance-relevante Aktionen ausgefuehrt hat.",
+    steps: ["Audit-Tab oeffnen und nach Critical oder Warning filtern.", "Aktion, Zeitpunkt, Benutzer und Objekt pruefen.", "Unklare Ereignisse mit der verantwortlichen Person klaeren.", "Bei Bedarf zusaetzliche Nachweise im jeweiligen Fachbereich sichern."],
+    checks: ["Gibt es ungeplante Rollen- oder Passwortaenderungen?", "Sind Deaktivierungen plausibel?", "Sind kritische Events zeitnah reviewed?"],
+    artifactTitle: "Screenshot-Artefakt: Audit-Review",
+    artifactSections: [["1", "Schweregrad filtern"], ["2", "Event lesen"], ["3", "Verantwortung klaeren"]],
+  },
+  {
+    id: "azure",
+    title: "Azure vorbereiten",
+    summary: "Lokale Testnutzer verwenden und Azure Object IDs fuer SSO hinterlegen.",
+    purpose: "Das Testsystem ohne Kunden-Azure betreiben und die spaetere Azure-Entra-ID-Anbindung fachlich vorbereiten.",
+    steps: ["Im Testsystem LOCAL fuer Testnutzer verwenden.", "Fuer kuenftige SSO-Benutzer Provider AZURE_AD setzen.", "Azure Object ID hinterlegen, sobald sie vom Kunden bereitgestellt wird.", "Nach Azure-Aktivierung lokale Passwoerter fuer produktive Benutzer entfernen."],
+    checks: ["Ist klar, ob der Benutzer lokal oder ueber Azure angemeldet wird?", "Liegt die korrekte Azure Object ID vor?", "Wurde MFA/SSO ausserhalb des Tools organisatorisch abgestimmt?"],
+    artifactTitle: "Screenshot-Artefakt: Provider-Entscheidung",
+    artifactSections: [["1", "LOCAL fuer Tests"], ["2", "AZURE_AD fuer Zielbetrieb"], ["3", "Object ID dokumentieren"]],
+  },
+];
+
+function TaskArtifact({ task }: { task: AdminTask }) {
+  return <div className="rounded-md border border-ez-line bg-ez-bg p-3"><div className="mb-3 text-sm font-semibold text-ez-navy">{task.artifactTitle}</div><div className="rounded border border-ez-line bg-white shadow-sm"><div className="flex items-center gap-2 border-b border-ez-line px-3 py-2"><span className="h-2.5 w-2.5 rounded-full bg-ez-burgundy-100" /><span className="h-2.5 w-2.5 rounded-full bg-amber-200" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-200" /><span className="ml-2 text-xs text-ez-muted">Administration / {task.title}</span></div><div className="grid gap-3 p-3 md:grid-cols-3">{task.artifactSections.map(([key, label]) => <div key={key} className="min-h-28 rounded border border-ez-line bg-white p-3"><div className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded bg-ez-petrol text-xs font-bold text-white">{key}</div><div className="text-sm font-medium text-ez-navy">{label}</div><div className="mt-3 h-2 rounded bg-ez-petrol-50" /><div className="mt-2 h-2 w-2/3 rounded bg-ez-line" /><div className="mt-2 h-2 w-1/2 rounded bg-ez-line" /></div>)}</div></div><p className="mt-2 text-xs leading-5 text-ez-muted">Dieses eingebettete Artefakt bildet die erwartete Arbeitslogik im Tool ab und dient als visuelle Orientierung innerhalb der Admin-Konsole.</p></div>;
+}
+
+function TaskDetail({ task }: { task: AdminTask }) {
+  return <section className="rounded-md border border-ez-line bg-white"><PanelHeader title={task.title} description={task.purpose} icon={<BookOpenCheck size={18} />} /><div className="grid gap-6 p-4 xl:grid-cols-[1fr_1fr]"><div className="space-y-4"><div><h3 className="text-sm font-semibold text-ez-navy">Arbeitsanweisung</h3><ol className="mt-2 list-decimal space-y-2 pl-5 text-sm leading-6 text-ez-muted">{task.steps.map((step) => <li key={step}>{step}</li>)}</ol></div><div><h3 className="text-sm font-semibold text-ez-navy">Pruefpunkte vor Abschluss</h3><ul className="mt-2 space-y-2 text-sm leading-6 text-ez-muted">{task.checks.map((check) => <li key={check} className="flex gap-2"><ShieldCheck className="mt-0.5 shrink-0 text-ez-petrol" size={15} /><span>{check}</span></li>)}</ul></div></div><TaskArtifact task={task} /></div></section>;
+}
+
 function AdminOverview({ users, onboardingRows, retentionPolicies, audits }: Pick<AdminWorkspaceProps, "users" | "onboardingRows" | "retentionPolicies" | "audits">) {
+  const [selectedTaskId, setSelectedTaskId] = useState(adminTasks[0].id);
   const activeUsers = users.filter((user) => user.status === "ACTIVE").length;
   const disabledUsers = users.filter((user) => user.status === "DISABLED").length;
   const openOnboarding = onboardingRows.filter((row) => row.percent < 100).length;
   const criticalAudits = audits.filter((audit) => audit.severity === "CRITICAL").length;
   const activeRetention = retentionPolicies.filter((policy) => policy.active).length;
-  const tasks = [
-    ["Benutzer verwalten", "Benutzer suchen, Stammdaten bearbeiten, Passwoerter zuruecksetzen und Accounts deaktivieren."],
-    ["Rollen pruefen", "Zugriffe nach Need-to-know vergeben; kritische Rollen sind im Audit Trail nachvollziehbar."],
-    ["Onboarding kontrollieren", "Schulungsnachweise fuer sensible HR- und Verguetungsdaten pruefen."],
-    ["Retention steuern", "Aufbewahrungs-, Review-, Anonymisierungs- und Legal-Hold-Regeln transparent verwalten."],
-    ["Audit auswerten", "Kritische administrative Aktionen und Sicherheitsereignisse zeitnah nachvollziehen."],
-    ["Azure vorbereiten", "Lokale Testnutzer verwenden und Azure Object IDs fuer SSO hinterlegen."],
-  ];
-  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5"><Metric label="Aktive Benutzer" value={activeUsers} hint="Koennen sich anmelden und arbeiten." tone="good" /><Metric label="Deaktiviert" value={disabledUsers} hint="Login gesperrt; Nachweise bleiben erhalten." tone={disabledUsers ? "warn" : "neutral"} /><Metric label="Offenes Onboarding" value={openOnboarding} hint="Fehlende Schulungsnachweise." tone={openOnboarding ? "warn" : "good"} /><Metric label="Retention-Regeln" value={activeRetention} hint="Aktive Datenschutzregeln." /><Metric label="Kritische Audit-Events" value={criticalAudits} hint="Letzte protokollierte Events." tone={criticalAudits ? "danger" : "good"} /></div><section className="rounded-md border border-ez-line bg-white"><PanelHeader title="Administrative Aufgaben" description="Die Administration ist nach wiederkehrenden Aufgaben getrennt. Jeder Bereich beschreibt, welche Arbeit dort erledigt wird." icon={<LayoutDashboard size={18} />} /><div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">{tasks.map(([title, text]) => <div key={title} className="rounded border border-ez-line p-4"><div className="font-semibold text-ez-navy">{title}</div><p className="mt-1 text-sm leading-5 text-ez-muted">{text}</p></div>)}</div></section></div>;
+  const selectedTask = adminTasks.find((task) => task.id === selectedTaskId) ?? adminTasks[0];
+  return <div className="space-y-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5"><Metric label="Aktive Benutzer" value={activeUsers} hint="Koennen sich anmelden und arbeiten." tone="good" /><Metric label="Deaktiviert" value={disabledUsers} hint="Login gesperrt; Nachweise bleiben erhalten." tone={disabledUsers ? "warn" : "neutral"} /><Metric label="Offenes Onboarding" value={openOnboarding} hint="Fehlende Schulungsnachweise." tone={openOnboarding ? "warn" : "good"} /><Metric label="Retention-Regeln" value={activeRetention} hint="Aktive Datenschutzregeln." /><Metric label="Kritische Audit-Events" value={criticalAudits} hint="Letzte protokollierte Events." tone={criticalAudits ? "danger" : "good"} /></div><section className="rounded-md border border-ez-line bg-white"><PanelHeader title="Administrative Aufgaben" description="Jede Kachel oeffnet eine konkrete Arbeitsanweisung mit Ablauf, Pruefpunkten und eingebettetem Orientierungsartefakt." icon={<LayoutDashboard size={18} />} /><div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">{adminTasks.map((task) => <button key={task.id} type="button" onClick={() => setSelectedTaskId(task.id)} className={`focus-ring rounded border p-4 text-left transition ${selectedTaskId === task.id ? "border-ez-petrol bg-ez-petrol-50" : "border-ez-line bg-white hover:border-ez-petrol"}`}><div className="flex items-start justify-between gap-3"><div className="font-semibold text-ez-navy">{task.title}</div><span className="rounded bg-ez-bg px-2 py-0.5 text-xs font-semibold text-ez-muted">Details</span></div><p className="mt-1 text-sm leading-5 text-ez-muted">{task.summary}</p></button>)}</div></section><TaskDetail task={selectedTask} /></div>;
 }
+
 
 function UserCreatePanel({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState<string>(); const [error, setError] = useState<string>();
